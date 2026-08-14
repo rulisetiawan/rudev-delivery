@@ -22,9 +22,22 @@ export default function App() {
     }
   ];
 
+  const sendDriverGPSPing = async (lat = -7.2845, lng = 108.1634) => {
+    try {
+      await fetch('http://localhost:8080/api/v1/orders/courier/gps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ courier_id: 1, latitude: lat, longitude: lng })
+      });
+    } catch (e) {
+      console.log('GPS ping error:', e);
+    }
+  };
+
   const handleClaimJob = (job) => {
     setSelectedJob(job);
     setActiveTab('active_job');
+    sendDriverGPSPing();
     Alert.alert('Job Berhasil Diambil!', `Silakan pergi ke ${job.storeName} untuk membeli barang.`);
   };
 

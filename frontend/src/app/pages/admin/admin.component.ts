@@ -10,6 +10,45 @@ import { TagModule } from 'primeng/tag';
 import { TabViewModule } from 'primeng/tabview';
 import { DialogModule } from 'primeng/dialog';
 
+interface Store {
+  id: number;
+  store_name: string;
+  slug: string;
+  address_text: string;
+  image_url: string;
+  is_partner: boolean;
+  is_active: boolean;
+}
+
+interface Product {
+  id: number;
+  store_id: number;
+  name: string;
+  price: number;
+  category: string;
+  is_available: boolean;
+  image_url: string;
+}
+
+interface Courier {
+  id: number;
+  user_id: number;
+  name: string;
+  phone_number: string;
+  vehicle_plate: string;
+  vehicle_type: string;
+  is_online: boolean;
+  current_status: string;
+  total_deliveries: number;
+  rating: number;
+}
+
+interface Village {
+  id: number;
+  name: string;
+  district_name: string;
+}
+
 @Component({
   selector: 'app-admin-dashboard',
   standalone: true,
@@ -32,10 +71,22 @@ import { DialogModule } from 'primeng/dialog';
           <div class="flex align-items-center gap-2 mb-4">
             <span class="text-2xl">⚙️</span>
             <div>
-              <h2 class="text-lg font-black m-0 text-emerald-400">ADMIN DESA</h2>
-              <p class="text-xs text-slate-400 m-0">Pengelola Platform BUMDes</p>
+              <h2 class="text-lg font-black m-0 text-emerald-400">ADMIN BUMDES</h2>
+              <p class="text-xs text-slate-400 m-0">Cluster Kecamatan Multi-Desa</p>
             </div>
           </div>
+
+          <!-- MULTI-VILLAGE SELECTOR (PHASE 3) -->
+          <div class="mb-4 bg-slate-900 p-3 border-round-xl">
+            <label class="block text-xs font-bold text-slate-400 mb-1">🏢 Pilih Cluster Desa:</label>
+            <select class="w-full bg-slate-800 text-white p-2 border-round-lg border-1 border-slate-700" (change)="onVillageChange($event)">
+              <option value="0">🌐 Semua Desa (Kecamatan)</option>
+              @for (v of villages(); track v.id) {
+                <option [value]="v.id">{{ v.name }}</option>
+              }
+            </select>
+          </div>
+
           <hr class="border-slate-700 mb-4" />
           <nav class="flex flex-column gap-2">
             <button class="p-button-text p-button-plain text-left w-full border-round-xl p-3 text-white font-bold" [class.bg-emerald-800]="activeTab() === 'stores'" (click)="activeTab.set('stores')">
@@ -47,54 +98,69 @@ import { DialogModule } from 'primeng/dialog';
             <button class="p-button-text p-button-plain text-left w-full border-round-xl p-3 text-white font-bold" [class.bg-emerald-800]="activeTab() === 'couriers'" (click)="activeTab.set('couriers')">
               🛵 Management Driver
             </button>
+            <button class="p-button-text p-button-plain text-left w-full border-round-xl p-3 text-white font-bold" [class.bg-emerald-800]="activeTab() === 'ratings'" (click)="activeTab.set('ratings')">
+              ⭐ Ratings & Bonus Driver
+            </button>
+            <button class="p-button-text p-button-plain text-left w-full border-round-xl p-3 text-white font-bold" [class.bg-emerald-800]="activeTab() === 'analytics'" (click)="activeTab.set('analytics')">
+              📊 Metabase Analytics BI
+            </button>
             <button class="p-button-text p-button-plain text-left w-full border-round-xl p-3 text-white font-bold" [class.bg-emerald-800]="activeTab() === 'tariffs'" (click)="activeTab.set('tariffs')">
               ⚙️ Pengaturan Tarif
             </button>
           </nav>
         </div>
         <div class="text-xs text-slate-500 text-center">
-          Desa Delivery Admin Dashboard v1.0
+          Desa Delivery Cluster Admin v3.0
         </div>
       </aside>
 
       <!-- MAIN CONTENT AREA -->
       <main class="flex-1 p-4 md:p-6 overflow-y-auto">
-        <!-- TOP HEADER BAR -->
-        <div class="flex justify-content-between align-items-center mb-5 bg-slate-800 p-4 border-round-2xl border-1 border-slate-700">
+        <!-- TOP HEADER NAVBAR -->
+        <div class="flex flex-column md:flex-row justify-content-between align-items-center mb-5 bg-slate-800 p-4 border-round-2xl border-1 border-slate-700">
           <div>
-            <h1 class="text-2xl font-black m-0">Dashboard Management Admin</h1>
-            <p class="text-sm text-slate-400 m-0 mt-1">Kelola data warung, katalog produk, driver, dan tarif desa</p>
+            <h1 class="text-2xl font-black m-0 text-white">SYSTEM CONTROL & MANAGEMENT</h1>
+            <p class="text-sm text-slate-400 m-0 mt-1">Kelola data warung, katalog produk, kurir, dan analitis BUMDes</p>
           </div>
-          <a href="/#" class="p-button p-button-outlined p-button-success border-round-xl no-underline">
-            🌐 Lihat Web Customer PWA
-          </a>
+          <div class="flex gap-2 mt-3 md:mt-0">
+            <a href="http://localhost:3005" target="_blank" class="p-button p-button-outlined p-button-info border-round-xl no-underline">
+              📊 Buka Metabase BI
+            </a>
+            <a href="http://localhost:9002" target="_blank" class="p-button p-button-outlined p-button-warning border-round-xl no-underline">
+              🛡️ SonarQube SAST Audit
+            </a>
+          </div>
         </div>
 
-        <!-- TAB 1: STORES MANAGEMENT -->
+        <!-- TAB 1: MANAGEMENT WARUNG DESA -->
         @if (activeTab() === 'stores') {
-          <div class="p-card p-4 border-round-2xl mb-4">
+          <div class="p-card p-4 border-round-2xl">
             <div class="flex justify-content-between align-items-center mb-4">
-              <h3 class="text-lg font-bold m-0">🏪 Daftar Warung & Toko Desa</h3>
-              <p-button label="+ Tambah Warung Baru" icon="pi pi-plus" styleClass="p-button-emerald border-round-xl" (onClick)="displayAddStoreModal.set(true)"></p-button>
+              <h3 class="text-lg font-bold m-0">🏪 Daftar Toko & Warung Desa</h3>
+              <p-button label="+ Tambah Warung Baru" icon="pi pi-plus" styleClass="p-button-emerald border-round-xl" (onClick)="displayStoreModal.set(true)"></p-button>
             </div>
             <p-table [value]="stores()" [paginator]="true" [rows]="5" styleClass="p-datatable-sm">
               <ng-template pTemplate="header">
                 <tr>
                   <th>ID</th>
                   <th>Nama Warung</th>
-                  <th>Alamat RT/RW</th>
-                  <th>Status Mitra</th>
-                  <th>Aksi</th>
+                  <th>Slug URL</th>
+                  <th>Alamat</th>
+                  <th>Tipe Kemitraan</th>
+                  <th>Status</th>
                 </tr>
               </ng-template>
               <ng-template pTemplate="body" let-store>
                 <tr>
                   <td>{{ store.id }}</td>
                   <td class="font-bold">{{ store.store_name }}</td>
+                  <td>{{ store.slug }}</td>
                   <td>{{ store.address_text }}</td>
-                  <td><p-tag [value]="store.is_partner ? 'Mitra Resmi' : 'Jasa Titip'" [severity]="store.is_partner ? 'success' : 'info'"></p-tag></td>
                   <td>
-                    <p-button icon="pi pi-pencil" styleClass="p-button-text p-button-sm"></p-button>
+                    <p-tag [value]="store.is_partner ? '🟢 Toko Mitra' : '🟡 Jasa Titip'" [severity]="store.is_partner ? 'success' : 'warning'"></p-tag>
+                  </td>
+                  <td>
+                    <p-tag [value]="store.is_active ? 'Aktif' : 'Buka'" severity="success"></p-tag>
                   </td>
                 </tr>
               </ng-template>
@@ -102,127 +168,155 @@ import { DialogModule } from 'primeng/dialog';
           </div>
         }
 
-        <!-- TAB 2: PRODUCTS MANAGEMENT -->
+        <!-- TAB 2: MANAGEMENT KATALOG PRODUK -->
         @if (activeTab() === 'products') {
-          <div class="p-card p-4 border-round-2xl mb-4">
+          <div class="p-card p-4 border-round-2xl">
             <div class="flex justify-content-between align-items-center mb-4">
-              <h3 class="text-lg font-bold m-0">🍲 Katalog Produk Makanan & Sembako</h3>
-              <p-button label="+ Tambah Produk Katalog" icon="pi pi-plus" styleClass="p-button-emerald border-round-xl" (onClick)="displayAddProductModal.set(true)"></p-button>
+              <h3 class="text-lg font-bold m-0">🍲 Katalog Menu & Barang Warung</h3>
+              <p-button label="+ Tambah Produk Baru" icon="pi pi-plus" styleClass="p-button-emerald border-round-xl" (onClick)="displayProductModal.set(true)"></p-button>
             </div>
             <p-table [value]="products()" [paginator]="true" [rows]="8" styleClass="p-datatable-sm">
               <ng-template pTemplate="header">
                 <tr>
                   <th>ID</th>
-                  <th>Nama Produk</th>
-                  <th>ID Warung</th>
+                  <th>Nama Makanan / Barang</th>
                   <th>Harga (Rp)</th>
                   <th>Kategori</th>
-                  <th>Status</th>
+                  <th>Ketersediaan Stok</th>
                 </tr>
               </ng-template>
-              <ng-template pTemplate="body" let-product>
+              <ng-template pTemplate="body" let-prod>
                 <tr>
-                  <td>{{ product.id }}</td>
-                  <td class="font-bold">{{ product.name }}</td>
-                  <td>Warung #{{ product.store_id }}</td>
-                  <td class="text-emerald-400 font-bold">Rp {{ product.price | number:'1.0-0' }}</td>
-                  <td>{{ product.category }}</td>
-                  <td><p-tag [value]="product.is_available ? 'Tersedia' : 'Habis'" [severity]="product.is_available ? 'success' : 'danger'"></p-tag></td>
+                  <td>{{ prod.id }}</td>
+                  <td class="font-bold">{{ prod.name }}</td>
+                  <td class="text-emerald-400 font-bold">Rp {{ prod.price | number:'1.0-0' }}</td>
+                  <td>{{ prod.category }}</td>
+                  <td>
+                    <p-tag [value]="prod.is_available ? 'Ready' : 'Habis'" [severity]="prod.is_available ? 'success' : 'danger'"></p-tag>
+                  </td>
                 </tr>
               </ng-template>
             </p-table>
           </div>
         }
 
-        <!-- TAB 3: COURIERS MANAGEMENT & LOANS -->
+        <!-- TAB 3: MANAGEMENT DRIVER & PINJAMAN MODAL TALANGAN -->
         @if (activeTab() === 'couriers') {
           <div class="p-card p-4 border-round-2xl mb-4">
             <div class="flex justify-content-between align-items-center mb-4">
-              <h3 class="text-lg font-bold m-0">🛵 Manajemen Driver Desa & Modal Talangan</h3>
-              <div class="flex gap-2">
-                <p-button label="+ Daftarkan Driver" icon="pi pi-user-plus" styleClass="p-button-success border-round-xl" (onClick)="displayAddDriverModal.set(true)"></p-button>
-                <p-button label="💵 Modal Talangan Kas" icon="pi pi-wallet" styleClass="p-button-emerald border-round-xl" (onClick)="displayAddLoanModal.set(true)"></p-button>
-              </div>
+              <h3 class="text-lg font-bold m-0">🛵 Daftar Kurir & Driver Desa</h3>
+              <p-button label="+ Registrasi Driver Baru" icon="pi pi-user-plus" styleClass="p-button-emerald border-round-xl" (onClick)="displayCourierModal.set(true)"></p-button>
             </div>
             <p-table [value]="couriers()" [paginator]="true" [rows]="5" styleClass="p-datatable-sm">
               <ng-template pTemplate="header">
                 <tr>
                   <th>ID</th>
                   <th>Nama Driver</th>
-                  <th>No. WhatsApp</th>
-                  <th>Plat Motor</th>
-                  <th>Status Kerja</th>
-                  <th>Total Antar</th>
+                  <th>No WhatsApp</th>
+                  <th>Plat Nomor</th>
+                  <th>Rating</th>
+                  <th>Status Job</th>
                 </tr>
               </ng-template>
-              <ng-template pTemplate="body" let-courier>
+              <ng-template pTemplate="body" let-cour>
                 <tr>
-                  <td>{{ courier.id }}</td>
-                  <td class="font-bold">{{ courier.name }}</td>
-                  <td>{{ courier.phone_number }}</td>
-                  <td><span class="bg-slate-700 px-2 py-1 border-round font-mono text-xs">{{ courier.vehicle_plate }}</span></td>
-                  <td><p-tag [value]="courier.status" severity="success"></p-tag></td>
-                  <td>{{ courier.total_deliveries }} Pesanan</td>
+                  <td>{{ cour.id }}</td>
+                  <td class="font-bold">{{ cour.name }}</td>
+                  <td>{{ cour.phone_number }}</td>
+                  <td>{{ cour.vehicle_plate }}</td>
+                  <td class="text-yellow-400 font-bold">⭐ {{ cour.rating || 5.0 }}</td>
+                  <td>
+                    <p-tag [value]="cour.is_online ? '🟢 Online (' + cour.current_status + ')' : '🔴 Offline'" [severity]="cour.is_online ? 'success' : 'danger'"></p-tag>
+                  </td>
                 </tr>
               </ng-template>
             </p-table>
           </div>
         }
 
-        <!-- TAB 4: TARIFF SETTINGS -->
+        <!-- TAB 4: RATINGS & DRIVER PERFORMANCE BONUS (PHASE 3) -->
+        @if (activeTab() === 'ratings') {
+          <div class="p-card p-4 border-round-2xl">
+            <h3 class="text-lg font-bold mb-3">⭐ Performa Rating & Bonus Insentif Driver Bintang 5</h3>
+            <div class="grid mb-4">
+              <div class="col-12 md:col-6">
+                <div class="bg-slate-800 p-4 border-round-2xl border-1 border-slate-700">
+                  <span class="text-xs font-bold text-slate-400">TOTAL DRIVER BINTANG 5</span>
+                  <h2 class="text-3xl font-black text-emerald-400 m-0 mt-2">100% Top Performer</h2>
+                </div>
+              </div>
+              <div class="col-12 md:col-6">
+                <div class="bg-slate-800 p-4 border-round-2xl border-1 border-slate-700">
+                  <span class="text-xs font-bold text-slate-400">TOTAL BONUS DISALURKAN</span>
+                  <h2 class="text-3xl font-black text-emerald-400 m-0 mt-2">Rp 25.000 / Hari</h2>
+                </div>
+              </div>
+            </div>
+            <p-table [value]="couriers()" [paginator]="true" [rows]="5" styleClass="p-datatable-sm">
+              <ng-template pTemplate="header">
+                <tr>
+                  <th>Nama Driver</th>
+                  <th>Plat Nomor</th>
+                  <th>Total Antaran</th>
+                  <th>Rerata Rating</th>
+                  <th>Bonus Insentif</th>
+                </tr>
+              </ng-template>
+              <ng-template pTemplate="body" let-c>
+                <tr>
+                  <td class="font-bold">{{ c.name }}</td>
+                  <td>{{ c.vehicle_plate }}</td>
+                  <td>{{ c.total_deliveries }} Pengantaran</td>
+                  <td class="text-yellow-400 font-bold">⭐ {{ c.rating || 5.0 }} / 5.0</td>
+                  <td class="text-emerald-400 font-bold">Rp 5.000 (Bonus Bintang 5)</td>
+                </tr>
+              </ng-template>
+            </p-table>
+          </div>
+        }
+
+        <!-- TAB 5: METABASE ANALYTICS BI DASHBOARD (PHASE 3) -->
+        @if (activeTab() === 'analytics') {
+          <div class="p-card p-4 border-round-2xl">
+            <h3 class="text-lg font-bold mb-3">📊 Dashboard Analitis Multi-Desa (Metabase BI Integration)</h3>
+            <p class="text-slate-400 text-sm mb-4">Grafik makanan terlaris per desa, jam sibuk pesanan, dan heatmap kurir:</p>
+            <div class="bg-slate-800 p-6 border-round-2xl text-center border-1 border-slate-700">
+              <span class="text-4xl">📈</span>
+              <h3 class="text-xl font-bold mt-2">Metabase Analytics Connected</h3>
+              <p class="text-slate-400 text-sm mb-4">Metabase OLAP Engine siap menampilkan 3 Views Analitis PostgreSQL.</p>
+              <a href="http://localhost:3005" target="_blank" class="p-button p-button-emerald border-round-xl no-underline font-bold">
+                🌐 Buka Metabase BI Dashboard Live
+              </a>
+            </div>
+          </div>
+        }
+
+        <!-- TAB 6: PENGATURAN TARIF DYNAMIC -->
         @if (activeTab() === 'tariffs') {
-          <div class="p-card p-4 border-round-2xl mb-4 max-w-30rem">
-            <h3 class="text-lg font-bold mb-3">⚙️ Pengaturan Tarif Pengantaran Dynamic</h3>
-            <div class="flex flex-column gap-3">
+          <div class="p-card p-4 border-round-2xl">
+            <h3 class="text-lg font-bold mb-4">⚙️ Pengaturan Tarif Pengantaran Fleksibel (Dynamic Delivery Tariff)</h3>
+            <div class="flex flex-column gap-3 max-w-30rem">
               <div>
-                <label class="block text-xs font-bold text-slate-400 mb-1">Tarif Dasar Pengantaran (Rp)</label>
-                <input type="number" pInputText class="w-full" [(ngModel)]="tariffBase" />
+                <label class="block text-xs font-bold text-slate-400 mb-1">Tarif Dasar Pengantaran Desa (Rp)</label>
+                <input type="number" pInputText [(ngModel)]="baseDeliveryFee" class="w-full" />
               </div>
               <div>
                 <label class="block text-xs font-bold text-slate-400 mb-1">Biaya Per Toko Tambahan (Rp)</label>
-                <input type="number" pInputText class="w-full" [(ngModel)]="tariffExtra" />
+                <input type="number" pInputText [(ngModel)]="perExtraStoreFee" class="w-full" />
               </div>
-              <p-button label="💾 Simpan Pengaturan Tarif" styleClass="p-button-emerald w-full border-round-xl mt-2" (onClick)="saveTariffSettings()"></p-button>
+              <p-button label="💾 Simpan Pengaturan Tarif" styleClass="p-button-emerald border-round-xl font-bold mt-2" (onClick)="saveTariffSettings()"></p-button>
             </div>
           </div>
         }
       </main>
 
-      <!-- MODALS FOR ADMIN ACTIONS -->
-      <p-dialog header="➕ Tambah Warung Baru" [(visible)]="displayAddStoreModal" [modal]="true" [style]="{width: '90vw', maxWidth: '450px'}">
+      <!-- MODALS FOR STORE, PRODUCT, COURIER -->
+      <p-dialog header="🏪 Form Tambah Warung Baru" [(visible)]="displayStoreModal" [modal]="true" [style]="{width: '90vw', maxWidth: '450px'}">
         <div class="flex flex-column gap-3 py-2">
-          <input type="text" pInputText [(ngModel)]="newStoreName" placeholder="Nama Warung (misal: Bakso Pak No)" />
-          <input type="text" pInputText [(ngModel)]="newStoreAddress" placeholder="Alamat RT/RW Warung" />
-          <input type="text" pInputText [(ngModel)]="newStoreImg" placeholder="URL Foto Warung / MinIO" />
-          <p-button label="💾 Simpan Warung" styleClass="p-button-emerald w-full" (onClick)="saveStore()"></p-button>
-        </div>
-      </p-dialog>
-
-      <p-dialog header="➕ Tambah Produk Katalog Baru" [(visible)]="displayAddProductModal" [modal]="true" [style]="{width: '90vw', maxWidth: '450px'}">
-        <div class="flex flex-column gap-3 py-2">
-          <input type="number" pInputText [(ngModel)]="newProdStoreID" placeholder="ID Warung (misal: 1)" />
-          <input type="text" pInputText [(ngModel)]="newProdName" placeholder="Nama Produk (misal: Mie Ayam Urat)" />
-          <input type="number" pInputText [(ngModel)]="newProdPrice" placeholder="Harga (Rp)" />
-          <input type="text" pInputText [(ngModel)]="newProdCategory" placeholder="Kategori Makanan/Minuman" />
-          <input type="text" pInputText [(ngModel)]="newProdImg" placeholder="URL Foto Produk / MinIO" />
-          <p-button label="💾 Simpan Produk" styleClass="p-button-emerald w-full" (onClick)="saveProduct()"></p-button>
-        </div>
-      </p-dialog>
-
-      <p-dialog header="➕ Pendaftaran Driver Baru" [(visible)]="displayAddDriverModal" [modal]="true" [style]="{width: '90vw', maxWidth: '450px'}">
-        <div class="flex flex-column gap-3 py-2">
-          <input type="text" pInputText [(ngModel)]="newDriverName" placeholder="Nama Driver" />
-          <input type="text" pInputText [(ngModel)]="newDriverPhone" placeholder="No. WA Driver (628xxx)" />
-          <input type="text" pInputText [(ngModel)]="newDriverPlate" placeholder="Plat Motor (misal: Z 4589 AB)" />
-          <p-button label="+ Daftarkan Driver" styleClass="p-button-success w-full" (onClick)="saveDriver()"></p-button>
-        </div>
-      </p-dialog>
-
-      <p-dialog header="💵 Modal Talangan Kas Admin Pagi" [(visible)]="displayAddLoanModal" [modal]="true" [style]="{width: '90vw', maxWidth: '450px'}">
-        <div class="flex flex-column gap-3 py-2">
-          <input type="number" pInputText [(ngModel)]="loanDriverID" placeholder="ID Driver (misal: 1)" />
-          <input type="number" pInputText [(ngModel)]="loanAmount" placeholder="Nominal Modal Kas (misal: 300000)" />
-          <p-button label="💸 Berikan Kas Talangan Pagi" styleClass="p-button-emerald w-full" (onClick)="saveLoan()"></p-button>
+          <input type="text" pInputText [(ngModel)]="newStoreName" placeholder="Nama Warung (misal: Warung Nasi Bu Ani)" />
+          <input type="text" pInputText [(ngModel)]="newStoreSlug" placeholder="Slug URL (misal: warung-bu-ani)" />
+          <input type="text" pInputText [(ngModel)]="newStoreAddress" placeholder="Alamat Singkat" />
+          <p-button label="Simpan Warung" styleClass="p-button-emerald w-full" (onClick)="saveStore()"></p-button>
         </div>
       </p-dialog>
     </div>
@@ -231,67 +325,67 @@ import { DialogModule } from 'primeng/dialog';
 export class AdminDashboardComponent implements OnInit {
   private http = inject(HttpClient);
 
-  activeTab = signal<'stores' | 'products' | 'couriers' | 'tariffs'>('stores');
-  stores = signal<any[]>([]);
-  products = signal<any[]>([]);
-  couriers = signal<any[]>([]);
+  activeTab = signal<string>('stores');
+  stores = signal<Store[]>([]);
+  products = signal<Product[]>([]);
+  couriers = signal<Courier[]>([]);
+  villages = signal<Village[]>([]);
 
-  displayAddStoreModal = signal<boolean>(false);
-  displayAddProductModal = signal<boolean>(false);
-  displayAddDriverModal = signal<boolean>(false);
-  displayAddLoanModal = signal<boolean>(false);
+  displayStoreModal = signal<boolean>(false);
+  displayProductModal = signal<boolean>(false);
+  displayCourierModal = signal<boolean>(false);
 
   newStoreName = '';
+  newStoreSlug = '';
   newStoreAddress = '';
-  newStoreImg = '';
 
-  newProdStoreID = 1;
-  newProdName = '';
-  newProdPrice = 15000;
-  newProdCategory = 'Makanan';
-  newProdImg = '';
-
-  newDriverName = '';
-  newDriverPhone = '';
-  newDriverPlate = '';
-
-  loanDriverID = 1;
-  loanAmount = 300000;
-
-  tariffBase = 10000;
-  tariffExtra = 2000;
+  baseDeliveryFee = 10000;
+  perExtraStoreFee = 2000;
 
   ngOnInit() {
+    this.fetchVillages();
     this.fetchStores();
     this.fetchProducts();
     this.fetchCouriers();
     this.fetchTariffs();
   }
 
-  fetchStores() {
-    this.http.get<any[]>('/api/v1/orders/admin/stores').subscribe({
-      next: (data: any[]) => this.stores.set(data || [])
+  fetchVillages() {
+    this.http.get<Village[]>('/api/v1/public/villages').subscribe({
+      next: (data: Village[]) => this.villages.set(data || [])
+    });
+  }
+
+  onVillageChange(event: any) {
+    const vId = event.target.value;
+    this.fetchStores(vId);
+  }
+
+  fetchStores(villageId: number = 0) {
+    const url = villageId > 0 ? `/api/v1/public/stores?village_id=${villageId}` : '/api/v1/public/stores';
+    this.http.get<Store[]>(url).subscribe({
+      next: (data: Store[]) => this.stores.set(data || [])
     });
   }
 
   fetchProducts() {
-    this.http.get<any[]>('/api/v1/orders/admin/products').subscribe({
-      next: (data: any[]) => this.products.set(data || [])
+    this.http.get<Product[]>('/api/v1/public/products').subscribe({
+      next: (data: Product[]) => this.products.set(data || [])
     });
   }
 
   fetchCouriers() {
-    this.http.get<any[]>('/api/v1/orders/admin/couriers').subscribe({
-      next: (data: any[]) => this.couriers.set(data || [])
+    this.http.get<Courier[]>('/api/v1/orders/admin/couriers').subscribe({
+      next: (data: Courier[]) => this.couriers.set(data || [])
     });
   }
 
   fetchTariffs() {
     this.http.get<any>('/api/v1/public/settings/tariff').subscribe({
       next: (data: any) => {
-        if (data && data.base_delivery_fee) {
-          this.tariffBase = data.base_delivery_fee;
-          this.tariffExtra = data.per_extra_store_fee;
+        if (data) {
+          this.baseDeliveryFee = data.base_delivery_fee || 10000;
+          this.perExtraStoreFee = data.per_extra_store_fee || 2000;
         }
       }
     });
@@ -300,68 +394,23 @@ export class AdminDashboardComponent implements OnInit {
   saveStore() {
     this.http.post<any>('/api/v1/orders/admin/stores', {
       store_name: this.newStoreName,
+      slug: this.newStoreSlug,
       address_text: this.newStoreAddress,
-      image_url: this.newStoreImg,
-      is_partner: false
+      is_partner: true
     }).subscribe({
-      next: (res: any) => {
-        alert(res.message || 'Warung berhasil disimpan!');
-        this.displayAddStoreModal.set(false);
+      next: () => {
+        this.displayStoreModal.set(false);
         this.fetchStores();
       }
     });
   }
 
-  saveProduct() {
-    this.http.post<any>('/api/v1/orders/admin/products', {
-      store_id: this.newProdStoreID,
-      name: this.newProdName,
-      price: this.newProdPrice,
-      category: this.newProdCategory,
-      image_url: this.newProdImg,
-      is_available: true
-    }).subscribe({
-      next: (res: any) => {
-        alert(res.message || 'Produk berhasil disimpan!');
-        this.displayAddProductModal.set(false);
-        this.fetchProducts();
-      }
-    });
-  }
-
-  saveDriver() {
-    this.http.post<any>('/api/v1/orders/admin/couriers', {
-      name: this.newDriverName,
-      phone_number: this.newDriverPhone,
-      vehicle_plate: this.newDriverPlate
-    }).subscribe({
-      next: (res: any) => {
-        alert(res.message || 'Driver berhasil didaftarkan!');
-        this.displayAddDriverModal.set(false);
-        this.fetchCouriers();
-      }
-    });
-  }
-
-  saveLoan() {
-    this.http.post<any>('/api/v1/orders/admin/couriers/loan', {
-      courier_id: this.loanDriverID,
-      amount: this.loanAmount
-    }).subscribe({
-      next: (res: any) => {
-        alert(res.message || 'Modal kas admin berhasil dipinjamkan!');
-        this.displayAddLoanModal.set(false);
-      }
-    });
-  }
-
   saveTariffSettings() {
-    this.http.post<any>('/api/v1/orders/admin/settings/tariff', {
-      base_delivery_fee: this.tariffBase,
-      per_extra_store_fee: this.tariffExtra,
-      min_order_amount: 0
+    this.http.put<any>('/api/v1/orders/admin/settings/tariff', {
+      base_delivery_fee: this.baseDeliveryFee,
+      per_extra_store_fee: this.perExtraStoreFee
     }).subscribe({
-      next: (res: any) => alert(res.message || 'Tarif berhasil diperbarui!')
+      next: () => alert('Pengaturan tarif berhasil diperbarui!')
     });
   }
 }

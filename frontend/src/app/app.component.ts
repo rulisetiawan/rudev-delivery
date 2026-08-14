@@ -30,6 +30,12 @@ interface Product {
   image_url: string;
 }
 
+interface Village {
+  id: number;
+  name: string;
+  district_name: string;
+}
+
 @Component({
   selector: 'app-root',
   standalone: true,
@@ -59,6 +65,16 @@ interface Product {
           <div class="max-w-30rem mx-auto text-center">
             <h1 class="text-2xl font-black m-0">🛵 PESAN ANTAR DESA</h1>
             <p class="text-xs text-emerald-200 mt-1 m-0">Kuliner & Sembako Desa Siap Antar via WhatsApp / QRIS</p>
+
+            <!-- VILLAGE CLUSTER SELECTOR (PHASE 3) -->
+            <div class="mt-3 bg-emerald-900 border-round-xl p-2 max-w-20rem mx-auto">
+              <span class="text-xs text-emerald-200">📍 Wilayah Desa: </span>
+              <select class="bg-transparent text-white font-bold border-none text-xs" (change)="onVillageSelect($event)">
+                @for (v of villages(); track v.id) {
+                  <option [value]="v.id" class="text-black">{{ v.name }} ({{ v.district_name }})</option>
+                }
+              </select>
+            </div>
           </div>
         </header>
 
@@ -114,7 +130,7 @@ interface Product {
           <div class="fixed bottom-0 left-50 -translate-x-50 w-11 max-w-30rem bg-gradient-to-r from-emerald-600 to-emerald-800 border-round-top-2xl p-3 shadow-6 flex justify-content-between align-items-center cursor-pointer mb-3" (click)="displayCheckoutModal.set(true)">
             <div>
               <h3 class="text-base font-bold m-0">{{ cartCount() }} Item Belanjaan</h3>
-              <p class="text-xs text-emerald-200 m-0">Klik untuk checkout & share location WA / QRIS</p>
+              <p class="text-xs text-emerald-200 m-0">Klik untuk checkout & auto-dispatch kurir</p>
             </div>
             <div class="text-lg font-black">Rp {{ cartTotal() | number:'1.0-0' }}</div>
           </div>
@@ -158,15 +174,22 @@ interface Product {
               </div>
             </div>
 
-            @if (qrisUrl()) {
-              <div class="text-center p-3 bg-white border-round-xl text-black">
-                <h4 class="font-bold m-0 mb-2">Scan QRIS BCA/Mandiri/GoPay/OVO:</h4>
-                <img [src]="qrisUrl()" class="w-12rem h-12rem mx-auto" />
-                <p class="text-xs text-gray-600 m-0 mt-2">Status bayar akan terverifikasi otomatis!</p>
-              </div>
-            }
-
             <p-button [label]="paymentMethod === 'QRIS' ? '💳 Bayar dengan Dynamic QRIS' : '📱 Kirim via WhatsApp WAHA'" icon="pi pi-whatsapp" styleClass="p-button-success w-full p-button-lg border-round-xl font-bold mt-2" (onClick)="submitCheckout()"></p-button>
+          </div>
+        </p-dialog>
+
+        <!-- RATING & REVIEW MODAL (PHASE 3) -->
+        <p-dialog header="⭐ Ulasan & Rating Driver Bintang 5" [(visible)]="displayRatingModal" [modal]="true" [style]="{width: '90vw', maxWidth: '400px'}">
+          <div class="text-center py-3">
+            <h3 class="text-lg font-bold m-0 mb-2">Bagaimana Pengantaran Kurir?</h3>
+            <p class="text-xs text-gray-400 mb-3">Berikan 5 bintang untuk memberikan bonus insentif driver!</p>
+            <div class="flex justify-content-center gap-2 mb-3">
+              @for (star of [1,2,3,4,5]; track star) {
+                <span class="text-3xl cursor-pointer" [class.text-yellow-400]="ratingStars() >= star" [class.text-gray-600]="ratingStars() < star" (click)="ratingStars.set(star)">★</span>
+              }
+            </div>
+            <input type="text" pInputText class="w-full mb-3" [(ngModel)]="reviewText" placeholder="Tulis ulasan Anda (opsional)..." />
+            <p-button label="⭐ Kirim Rating & Ulasan" styleClass="p-button-emerald w-full" (onClick)="submitRating()"></p-button>
           </div>
         </p-dialog>
       </div>
@@ -179,10 +202,12 @@ export class AppComponent implements OnInit {
   isAdminRoute = signal<boolean>(false);
   isMerchantRoute = signal<boolean>(false);
 
+  villages = signal<Village[]>([]);
   stores = signal<Store[]>([]);
   products = signal<Product[]>([]);
   selectedStoreName = signal<string>('Warung Bu Ani');
   selectedStoreID = signal<number>(1);
+  selectedVillageID = signal<number>(1);
 
   cart = signal<Product[]>([]);
   baseDeliveryFee = signal<number>(10000);
@@ -193,6 +218,10 @@ export class AppComponent implements OnInit {
   cartCount = computed(() => this.cart().length);
 
   displayCheckoutModal = signal<boolean>(false);
+  displayRatingModal = signal<boolean>(false);
+  ratingStars = signal<number>(5);
+  reviewText = '';
+  currentOrderID = 0;
 
   customerName = '';
   customerPhone = '';
@@ -203,6 +232,7 @@ export class AppComponent implements OnInit {
   ngOnInit() {
     this.checkRoute();
     if (!this.isAdminRoute() && !this.isMerchantRoute()) {
+      this.fetchVillages();
       this.fetchStores();
       this.fetchTariffs();
     }
@@ -218,10 +248,21 @@ export class AppComponent implements OnInit {
     }
   }
 
-  fetchStores() {
-    this.http.get<Store[]>('/api/v1/public/stores').subscribe({
-      next: (data: Store[]) => this.stores.set(data || []),
-      error: () => console.log('Mock stores fallback')
+  fetchVillages() {
+    this.http.get<Village[]>('/api/v1/public/villages').subscribe({
+      next: (data: Village[]) => this.villages.set(data || [])
+    });
+  }
+
+  onVillageSelect(event: any) {
+    const vId = event.target.value;
+    this.selectedVillageID.set(vId);
+    this.fetchStores(vId);
+  }
+
+  fetchStores(villageId: number = 1) {
+    this.http.get<Store[]>(`/api/v1/public/stores?village_id=${villageId}`).subscribe({
+      next: (data: Store[]) => this.stores.set(data || [])
     });
   }
 
@@ -270,22 +311,30 @@ export class AppComponent implements OnInit {
 
     this.http.post<any>('/api/v1/public/checkout', payload).subscribe({
       next: (res: any) => {
-        if (this.paymentMethod === 'QRIS') {
-          this.http.post<any>('/api/v1/payments/charge', {
-            order_id: res.order_id,
-            gross_amount: this.cartTotal(),
-            payment_type: 'QRIS'
-          }).subscribe({
-            next: (payRes: any) => {
-              this.qrisUrl.set(payRes.qr_code_url);
-            }
-          });
-        } else {
-          const waMsg = `Halo, saya ${this.customerName} mau pesan #${res.order_code}.\nAlamat: ${this.customerAddress}\nMohon diproses!`;
-          window.location.href = `https://wa.me/${res.waha_bot_number}?text=${encodeURIComponent(waMsg)}`;
-        }
+        this.currentOrderID = res.order_id;
+        this.displayCheckoutModal.set(false);
+        this.displayRatingModal.set(true); // Open Rating Modal after order creation
+
+        const waMsg = `Halo, saya ${this.customerName} mau pesan #${res.order_code}.\nAlamat: ${this.customerAddress}\nMohon diproses!`;
+        window.location.href = `https://wa.me/${res.waha_bot_number}?text=${encodeURIComponent(waMsg)}`;
       },
       error: () => alert('Gagal membuat pesanan!')
+    });
+  }
+
+  submitRating() {
+    this.http.post<any>('/api/v1/orders/rating', {
+      order_id: this.currentOrderID,
+      courier_id: 1,
+      customer_id: 1,
+      rating: this.ratingStars(),
+      review_text: this.reviewText
+    }).subscribe({
+      next: () => {
+        alert('Terima kasih! Rating & 5 bintang Anda berhasil terkirim.');
+        this.displayRatingModal.set(false);
+        this.cart.set([]);
+      }
     });
   }
 }

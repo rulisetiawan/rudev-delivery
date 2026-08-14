@@ -119,3 +119,28 @@ func TestTariffSettingsSerialization(t *testing.T) {
 		t.Errorf("Mismatch in unmarshalled tariff settings")
 	}
 }
+
+// 5. Test Haversine GPS Distance Calculator (Phase 3)
+func TestHaversineDistanceCalculator(t *testing.T) {
+	// Cisayong to Rajapolah distance (~6.2 km)
+	lat1, lon1 := -7.2845, 108.1634
+	lat2, lon2 := -7.2300, 108.1900
+
+	dist := calculateHaversineDistance(lat1, lon1, lat2, lon2)
+	if dist < 5.0 || dist > 8.0 {
+		t.Errorf("Expected distance ~6.2km between Cisayong and Rajapolah, got %.2fkm", dist)
+	}
+}
+
+// 6. Test Driver GPS Ping Handler (Phase 3)
+func TestDriverGPSPingInvalidMethod(t *testing.T) {
+	req := httptest.NewRequest("GET", "/api/v1/orders/courier/gps", nil)
+	w := httptest.NewRecorder()
+
+	handleDriverGPSPing(w, req)
+
+	resp := w.Result()
+	if resp.StatusCode != http.StatusMethodNotAllowed {
+		t.Errorf("Expected status 405 Method Not Allowed, got %d", resp.StatusCode)
+	}
+}

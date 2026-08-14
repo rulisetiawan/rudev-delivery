@@ -10,6 +10,7 @@ import (
 	"image"
 	"image/jpeg"
 	"log"
+	"math"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -117,6 +118,7 @@ func main() {
 
 	// Public Routes
 	mux.HandleFunc("/api/v1/public/stores", handleGetStores)
+	mux.HandleFunc("/api/v1/public/villages", handleGetVillages)
 	mux.HandleFunc("/api/v1/public/products", handleGetProducts)
 	mux.HandleFunc("/api/v1/public/share/store/", handleShareStoreOG)
 	mux.HandleFunc("/api/v1/public/checkout", handleCheckout)
@@ -130,8 +132,10 @@ func main() {
 	mux.HandleFunc("/api/v1/orders/admin/couriers/loan", handleAdminCourierLoan)
 	mux.HandleFunc("/api/v1/orders/admin/settings/tariff", handleAdminUpdateTariffSettings)
 
-	// Protected Courier Routes
+	// Protected Courier & Rating Routes (Phase 3)
 	mux.HandleFunc("/api/v1/orders/courier/receipt", handleSubmitReceipt)
+	mux.HandleFunc("/api/v1/orders/courier/gps", handleDriverGPSPing)
+	mux.HandleFunc("/api/v1/orders/rating", handleCreateOrderRating)
 	mux.HandleFunc("/api/v1/orders/cancel", handleCancelOrder)
 
 	port := getEnv("PORT", "8082")
@@ -288,6 +292,9 @@ func handleCheckout(w http.ResponseWriter, r *http.Request) {
 			VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 			orderID, productID, item.ItemName, item.Quantity, item.PricePerItem, item.Notes, item.IsCustom)
 	}
+
+	// Trigger Auto-Dispatch Engine for Nearest Idle Courier (Phase 3)
+	go autoDispatchCourier(orderID, req.StoreID, -7.2845, 108.1634)
 
 	publishEvent("order.created", map[string]interface{}{
 		"order_id":       orderID,
@@ -739,4 +746,149 @@ func getEnv(key, fallback string) string {
 		return val
 	}
 	return fallback
+}
+
+type Village struct {
+	ID           int64   `json:"id"`
+	Name         string  `json:"name"`
+	DistrictName string  `json:"district_name"`
+	CenterLat    float64 `json:"center_latitude"`
+	CenterLng    float64 `json:"center_longitude"`
+}
+
+type DriverGPSReq struct {
+	CourierID int64   `json:"courier_id"`
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+}
+
+type RatingReq struct {
+	OrderID    int64  `json:"order_id"`
+	CourierID  int64  `json:"courier_id"`
+	CustomerID int64  `json:"customer_id"`
+	Rating     int    `json:"rating"`
+	ReviewText string `json:"review_text"`
+}
+
+func calculateHaversineDistance(lat1, lon1, lat2, lon2 float64) float64 {
+	const R = 6371.0 // Earth radius in km
+	dLat := (lat2 - lat1) * (math.Pi / 180.0)
+	dLon := (lon2 - lon1) * (math.Pi / 180.0)
+
+	a := math.Sin(dLat/2)*math.Sin(dLat/2) +
+		math.Cos(lat1*(math.Pi/180.0))*math.Cos(lat2*(math.Pi/180.0))*
+			math.Sin(dLon/2)*math.Sin(dLon/2)
+
+	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+	return R * c
+}
+
+func autoDispatchCourier(orderID int64, storeID int64, orderLat, orderLng float64) (int64, error) {
+	if db == nil {
+		return 0, fmt.Errorf("DB connection is nil")
+	}
+
+	rows, err := db.Query(`
+		SELECT user_id, COALESCE(current_latitude, 0.0), COALESCE(current_longitude, 0.0)
+		FROM courier_profiles
+		WHERE is_online = true AND is_active = true AND current_status = 'IDLE'`)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	var bestCourierID int64
+	minDistance := 99999.0
+
+	for rows.Next() {
+		var courierID int64
+		var cLat, cLng float64
+		if err := rows.Scan(&courierID, &cLat, &cLng); err == nil {
+			dist := calculateHaversineDistance(cLat, cLng, orderLat, orderLng)
+			if dist < minDistance {
+				minDistance = dist
+				bestCourierID = courierID
+			}
+		}
+	}
+
+	if bestCourierID > 0 {
+		_, _ = db.Exec("UPDATE orders SET courier_id = $1, status = 'COURIER_ASSIGNED' WHERE id = $2", bestCourierID, orderID)
+		_, _ = db.Exec("UPDATE courier_profiles SET current_status = 'ON_DELIVERY' WHERE user_id = $1", bestCourierID)
+		publishEvent("order.assigned", map[string]interface{}{"order_id": orderID, "courier_id": bestCourierID})
+		return bestCourierID, nil
+	}
+
+	return 0, fmt.Errorf("Tidak ada kurir aktif terdekat")
+}
+
+func handleGetVillages(w http.ResponseWriter, r *http.Request) {
+	var villages []Village
+	if db != nil {
+		rows, err := db.Query("SELECT id, name, district_name, COALESCE(center_latitude, 0.0), COALESCE(center_longitude, 0.0) FROM villages WHERE is_active = true ORDER BY name ASC")
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var v Village
+				_ = rows.Scan(&v.ID, &v.Name, &v.DistrictName, &v.CenterLat, &v.CenterLng)
+				villages = append(villages, v)
+			}
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(villages)
+}
+
+func handleDriverGPSPing(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req DriverGPSReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"Payload tidak valid"}`, http.StatusBadRequest)
+		return
+	}
+
+	if db != nil {
+		_, _ = db.Exec("UPDATE courier_profiles SET current_latitude = $1, current_longitude = $2 WHERE user_id = $3", req.Latitude, req.Longitude, req.CourierID)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": "Koordinat GPS HP Driver diperbarui!"})
+}
+
+func handleCreateOrderRating(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req RatingReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"Payload tidak valid"}`, http.StatusBadRequest)
+		return
+	}
+
+	if db != nil {
+		_, err := db.Exec(`
+			INSERT INTO courier_ratings (order_id, courier_id, customer_id, rating, review_text)
+			VALUES ($1, $2, $3, $4, $5)`,
+			req.OrderID, req.CourierID, req.CustomerID, req.Rating, req.ReviewText)
+
+		if err == nil {
+			var avgRating float64
+			_ = db.QueryRow("SELECT COALESCE(AVG(rating), 5.0) FROM courier_ratings WHERE courier_id = $1", req.CourierID).Scan(&avgRating)
+			_, _ = db.Exec("UPDATE courier_profiles SET rating = $1 WHERE user_id = $2", avgRating, req.CourierID)
+
+			if req.Rating == 5 {
+				_, _ = db.Exec("INSERT INTO courier_bonuses (courier_id, bonus_amount, status) VALUES ($1, 5000, 'PAID')", req.CourierID)
+			}
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": "Terima kasih atas ulasan & 5 bintang Anda!"})
 }
