@@ -1,0 +1,263 @@
+services:
+  # ----------------------------------------------------
+  # 1. DATABASES & STORAGE INFRASTRUCTURE
+  # ----------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: desa_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: order_db
+      POSTGRES_USER: desa_user
+      POSTGRES_PASSWORD: desa_password
+      TZ: Asia/Jakarta
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata_order:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    networks:
+      - desa_net
+
+  redis:
+    image: redis:7-alpine
+    container_name: desa_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - desa_net
+
+  minio:
+    image: minio/minio:latest
+    container_name: desa_minio
+    restart: always
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: miniopassword
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - desa_net
+
+  create-buckets:
+    image: minio/mc:latest
+    container_name: desa_minio_init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set myminio http://minio:9000 minioadmin miniopassword;
+      /usr/bin/mc mb myminio/desa-media --ignore-existing;
+      /usr/bin/mc anonymous set download myminio/desa-media;
+      exit 0;
+      "
+    networks:
+      - desa_net
+
+  # ----------------------------------------------------
+  # 2. MESSAGE BROKER: RABBITMQ
+  # ----------------------------------------------------
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: desa_rabbitmq
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: adminpassword
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - desa_net
+
+  # ----------------------------------------------------
+  # 3. WHATSAPP ENGINE (WAHA)
+  # ----------------------------------------------------
+  waha:
+    image: devlikeapro/waha:latest
+    platform: linux/amd64
+    container_name: desa_waha
+    restart: always
+    environment:
+      WAHA_DASHBOARD_USERNAME: admin
+      WAHA_DASHBOARD_PASSWORD: adminpassword
+      WHATSAPP_HOOK_URL: http://notification-service:8083/api/v1/waha/webhook
+      WHATSAPP_HOOK_EVENTS: message,session.status
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./waha_data:/app/.sessions
+    networks:
+      - desa_net
+
+  # ----------------------------------------------------
+  # 4. ANALYTICS DASHBOARD: METABASE
+  # ----------------------------------------------------
+  metabase:
+    image: metabase/metabase:latest
+    platform: linux/amd64
+    container_name: desa_metabase
+    restart: always
+    ports:
+      - "3005:3000"
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: order_db
+      MB_DB_PORT: 5432
+      MB_DB_USER: desa_user
+      MB_DB_PASS: desa_password
+      MB_DB_HOST: postgres
+    depends_on:
+      - postgres
+    networks:
+      - desa_net
+
+  # ----------------------------------------------------
+  # 5. GOLANG MICROSERVICES
+  # ----------------------------------------------------
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+    container_name: ms_api_gateway
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      AUTH_SERVICE_URL: http://auth-service:8081
+      ORDER_SERVICE_URL: http://order-service:8082
+      REDIS_HOST: redis:6379
+      JWT_SECRET: supersecretkey_desa123
+    depends_on:
+      - redis
+      - auth-service
+      - order-service
+    networks:
+      - desa_net
+
+  auth-service:
+    build:
+      context: ./services/auth-service
+    container_name: ms_auth_service
+    restart: always
+    environment:
+      PORT: "8081"
+      DB_DSN: postgres://desa_user:desa_password@postgres:5432/order_db?sslmode=disable
+      JWT_SECRET: supersecretkey_desa123
+    depends_on:
+      - postgres
+    networks:
+      - desa_net
+
+  order-service:
+    build:
+      context: ./services/order-service
+    container_name: ms_order_service
+    restart: always
+    environment:
+      PORT: "8082"
+      DB_DSN: postgres://desa_user:desa_password@postgres:5432/order_db?sslmode=disable
+      RABBITMQ_URL: amqp://admin:adminpassword@rabbitmq:5672/
+      MINIO_ENDPOINT: minio:9000
+      MINIO_PUBLIC_URL: http://localhost:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: miniopassword
+      MINIO_BUCKET_NAME: desa-media
+      MINIO_USE_SSL: "false"
+    depends_on:
+      - postgres
+      - rabbitmq
+      - minio
+    networks:
+      - desa_net
+
+  notification-service:
+    build:
+      context: ./services/notification-service
+    container_name: ms_notification_service
+    restart: always
+    environment:
+      PORT: "8083"
+      WAHA_URL: http://waha:3000
+      RABBITMQ_URL: amqp://admin:adminpassword@rabbitmq:5672/
+      ORDER_SERVICE_URL: http://order-service:8082
+    depends_on:
+      - rabbitmq
+      - waha
+    networks:
+      - desa_net
+
+  audit-service:
+    build:
+      context: ./services/audit-service
+    container_name: ms_audit_service
+    restart: always
+    environment:
+      PORT: "8084"
+      DB_DSN: postgres://desa_user:desa_password@postgres:5432/order_db?sslmode=disable
+      RABBITMQ_URL: amqp://admin:adminpassword@rabbitmq:5672/
+    depends_on:
+      - postgres
+      - rabbitmq
+    networks:
+      - desa_net
+
+  # ----------------------------------------------------
+  # 6. FRONTEND PWA WEB APP (CUSTOMER & ADMIN DASHBOARD)
+  # ----------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+    container_name: desa_frontend
+    restart: always
+    depends_on:
+      - api-gateway
+    ports:
+      - "80:80"
+    networks:
+      - desa_net
+
+  # ----------------------------------------------------
+  # 7. CODE QUALITY & SECURITY SAST AUDIT: SONARQUBE (FREE)
+  # ----------------------------------------------------
+  sonarqube:
+    image: sonarqube:community
+    platform: linux/amd64
+    container_name: desa_sonarqube
+    restart: always
+    ports:
+      - "9002:9000"
+    environment:
+      - SONAR_JDBC_USERNAME=desa_user
+      - SONAR_JDBC_PASSWORD=desa_password
+      - SONAR_JDBC_URL=jdbc:postgresql://postgres:5432/order_db
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+    depends_on:
+      - postgres
+    networks:
+      - desa_net
+
+networks:
+  desa_net:
+    driver: bridge
+
+volumes:
+  pgdata_order:
+  redis_data:
+  minio_data:
+  rabbitmq_data:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:

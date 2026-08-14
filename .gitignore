@@ -1,0 +1,25 @@
+# Binaries & Build Artifacts
+/dist/
+/tmp/
+*.exe
+*.test
+*.out
+
+# Node Dependencies
+node_modules/
+.npm
+.eslintcache
+
+# Docker & Media Volume Data
+/waha_data/
+/pgdata_order/
+/minio_data/
+/rabbitmq_data/
+/sonarqube_data/
+/sonarqube_extensions/
+/sonarqube_logs/
+
+# Operating System & IDE
+.DS_Store
+.idea/
+.vscode/
