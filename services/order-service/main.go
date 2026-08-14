@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"html"
 	"image"
 	"image/jpeg"
 	"log"
@@ -204,13 +205,20 @@ func handleGetStores(w http.ResponseWriter, r *http.Request) {
 
 func handleGetProducts(w http.ResponseWriter, r *http.Request) {
 	storeIDStr := r.URL.Query().Get("store_id")
-	query := "SELECT id, store_id, name, price, category, is_available, COALESCE(image_url,'') FROM products WHERE is_available = true"
+	var storeID int64
 	if storeIDStr != "" {
-		query += " AND store_id = " + storeIDStr
+		storeID, _ = strconv.ParseInt(storeIDStr, 10, 64)
 	}
-	query += " ORDER BY id DESC"
 
-	rows, err := db.Query(query)
+	var rows *sql.Rows
+	var err error
+
+	if storeID > 0 {
+		rows, err = db.Query("SELECT id, store_id, name, price, category, is_available, COALESCE(image_url,'') FROM products WHERE is_available = true AND store_id = $1 ORDER BY id DESC", storeID)
+	} else {
+		rows, err = db.Query("SELECT id, store_id, name, price, category, is_available, COALESCE(image_url,'') FROM products WHERE is_available = true ORDER BY id DESC")
+	}
+
 	if err != nil {
 		http.Error(w, "DB Error", http.StatusInternalServerError)
 		return
@@ -316,6 +324,8 @@ func handleShareStoreOG(w http.ResponseWriter, r *http.Request) {
 
 	userAgent := strings.ToLower(r.UserAgent())
 	if strings.Contains(userAgent, "whatsapp") || strings.Contains(userAgent, "facebookexternalhit") {
+		safeName := html.EscapeString(name)
+		safeImgURL := html.EscapeString(imgURL)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		fmt.Fprintf(w, `<!DOCTYPE html>
 <html>
@@ -325,7 +335,7 @@ func handleShareStoreOG(w http.ResponseWriter, r *http.Request) {
     <meta property="og:image" content="%s" />
 </head>
 <body><p>%s</p></body>
-</html>`, name, name, imgURL, name)
+</html>`, safeName, safeName, safeImgURL, safeName)
 		return
 	}
 
@@ -398,13 +408,19 @@ func handleAdminProductCRUD(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		storeIDStr := r.URL.Query().Get("store_id")
-		query := "SELECT id, store_id, name, price, category, is_available, COALESCE(image_url,'') FROM products"
+		var storeID int64
 		if storeIDStr != "" {
-			query += " WHERE store_id = " + storeIDStr
+			storeID, _ = strconv.ParseInt(storeIDStr, 10, 64)
 		}
-		query += " ORDER BY id DESC"
 
-		rows, err := db.Query(query)
+		var rows *sql.Rows
+		var err error
+
+		if storeID > 0 {
+			rows, err = db.Query("SELECT id, store_id, name, price, category, is_available, COALESCE(image_url,'') FROM products WHERE store_id = $1 ORDER BY id DESC", storeID)
+		} else {
+			rows, err = db.Query("SELECT id, store_id, name, price, category, is_available, COALESCE(image_url,'') FROM products ORDER BY id DESC")
+		}
 		if err != nil {
 			http.Error(w, `{"error":"DB Error"}`, http.StatusInternalServerError)
 			return

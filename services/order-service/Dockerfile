@@ -7,9 +7,10 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o main .
 
 FROM alpine:3.19
-RUN apk --no-cache add ca-certificates tzdata
+RUN apk --no-cache add ca-certificates tzdata && adduser -D -u 10001 appuser
 ENV TZ=Asia/Jakarta
 WORKDIR /app
 COPY --from=builder /app/main .
+USER 10001
 EXPOSE 8082
 CMD ["./main"]
