@@ -19,20 +19,24 @@ import (
 )
 
 type Config struct {
-	Port            string
-	JWTSecret       []byte
-	AuthServiceURL  string
-	OrderServiceURL string
-	RedisHost       string
+	Port              string
+	JWTSecret         []byte
+	AuthServiceURL    string
+	OrderServiceURL   string
+	PaymentServiceURL string
+	ChatServiceURL    string
+	RedisHost         string
 }
 
 func main() {
 	cfg := Config{
-		Port:            getEnv("PORT", "8080"),
-		JWTSecret:       []byte(getEnv("JWT_SECRET", "supersecretkey_desa123")),
-		AuthServiceURL:  getEnv("AUTH_SERVICE_URL", "http://auth-service:8081"),
-		OrderServiceURL: getEnv("ORDER_SERVICE_URL", "http://order-service:8082"),
-		RedisHost:       getEnv("REDIS_HOST", "redis:6379"),
+		Port:              getEnv("PORT", "8080"),
+		JWTSecret:         []byte(getEnv("JWT_SECRET", "supersecretkey_desa123")),
+		AuthServiceURL:    getEnv("AUTH_SERVICE_URL", "http://auth-service:8081"),
+		OrderServiceURL:   getEnv("ORDER_SERVICE_URL", "http://order-service:8082"),
+		PaymentServiceURL: getEnv("PAYMENT_SERVICE_URL", "http://payment-service:8085"),
+		ChatServiceURL:    getEnv("CHAT_SERVICE_URL", "http://chat-service:8086"),
+		RedisHost:         getEnv("REDIS_HOST", "redis:6379"),
 	}
 
 	rdb := redis.NewClient(&redis.Options{
@@ -54,9 +58,13 @@ func main() {
 
 	authURL, _ := url.Parse(cfg.AuthServiceURL)
 	orderURL, _ := url.Parse(cfg.OrderServiceURL)
+	paymentURL, _ := url.Parse(cfg.PaymentServiceURL)
+	chatURL, _ := url.Parse(cfg.ChatServiceURL)
 
 	authProxy := httputil.NewSingleHostReverseProxy(authURL)
 	orderProxy := httputil.NewSingleHostReverseProxy(orderURL)
+	paymentProxy := httputil.NewSingleHostReverseProxy(paymentURL)
+	chatProxy := httputil.NewSingleHostReverseProxy(chatURL)
 
 	mux := http.NewServeMux()
 
@@ -77,6 +85,31 @@ func main() {
 			rateLimiter.LimitMiddleware(
 				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					orderProxy.ServeHTTP(w, r)
+				}),
+			),
+		),
+	))
+
+	// Public Payment Webhooks & QRIS Charge (Phase 2)
+	mux.Handle("/api/v1/payments/", corsMiddleware(
+		correlationIDMiddleware(
+			rateLimiter.LimitMiddleware(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					paymentProxy.ServeHTTP(w, r)
+				}),
+			),
+		),
+	))
+
+	// WebSockets Live Chat Proxy (Phase 2)
+	mux.Handle("/ws/chat", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		chatProxy.ServeHTTP(w, r)
+	}))
+	mux.Handle("/api/v1/chat/", corsMiddleware(
+		correlationIDMiddleware(
+			rateLimiter.LimitMiddleware(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					chatProxy.ServeHTTP(w, r)
 				}),
 			),
 		),

@@ -51,7 +51,19 @@ CREATE TABLE stores (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 4. TABEL PRODUCTS (KATALOG MENU/BARANG)
+-- 4. TABEL MERCHANT PROFILES (LOGIN PEMILIK WARUNG MITRA - PHASE 2)
+CREATE TABLE merchant_profiles (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    store_id BIGINT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    bank_name VARCHAR(50) NULL,
+    bank_account_number VARCHAR(50) NULL,
+    bank_account_name VARCHAR(100) NULL,
+    commission_rate NUMERIC(4,2) DEFAULT 5.00, -- 5% komisi desa
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 5. TABEL PRODUCTS (KATALOG MENU/BARANG)
 CREATE TABLE products (
     id BIGSERIAL PRIMARY KEY,
     store_id BIGINT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
@@ -63,7 +75,7 @@ CREATE TABLE products (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 5. TABEL ORDERS (TRANSAKSI PESANAN)
+-- 6. TABEL ORDERS (TRANSAKSI PESANAN)
 CREATE TABLE orders (
     id BIGSERIAL PRIMARY KEY,
     order_code VARCHAR(20) NOT NULL UNIQUE, -- Contoh: ORD-8821
@@ -76,8 +88,8 @@ CREATE TABLE orders (
     longitude NUMERIC(11, 8) NULL,  -- Ditangkap dari WAHA Share Location
     total_stores INT NOT NULL DEFAULT 1,
     subtotal NUMERIC(10,2) NOT NULL DEFAULT 0.00,
-    base_delivery_fee NUMERIC(10,2) NOT NULL DEFAULT 10000.00, -- Rp 10.000
-    store_add_fee NUMERIC(10,2) NOT NULL DEFAULT 2000.00,       -- Rp 2.000 per toko tambahan
+    base_delivery_fee NUMERIC(10,2) NOT NULL DEFAULT 10000.00,
+    store_add_fee NUMERIC(10,2) NOT NULL DEFAULT 2000.00,
     delivery_fee NUMERIC(10,2) NOT NULL DEFAULT 10000.00,
     total_amount NUMERIC(10,2) NOT NULL,
     payment_method payment_method_type NOT NULL DEFAULT 'COD',
@@ -92,7 +104,35 @@ CREATE TABLE orders (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 6. TABEL ORDER ITEMS (RINCIAN MIKRO BARANG)
+-- 7. TABEL PAYMENTS (TRANSAKSI NONTUNAI QRIS - PHASE 2)
+CREATE TABLE payments (
+    id BIGSERIAL PRIMARY KEY,
+    order_id BIGINT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    payment_gateway VARCHAR(50) NOT NULL DEFAULT 'MIDTRANS',
+    transaction_id VARCHAR(100) NOT NULL UNIQUE,
+    payment_type VARCHAR(50) NOT NULL DEFAULT 'QRIS',
+    gross_amount NUMERIC(10,2) NOT NULL,
+    qr_code_url TEXT NULL,
+    status payment_status_type NOT NULL DEFAULT 'PENDING',
+    raw_response JSONB NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 8. TABEL STORE PAYOUTS (PENCAIRAN OMZET TOKO MITRA - PHASE 2)
+CREATE TABLE store_payouts (
+    id BIGSERIAL PRIMARY KEY,
+    store_id BIGINT NOT NULL REFERENCES stores(id),
+    payout_code VARCHAR(30) NOT NULL UNIQUE,
+    gross_sales NUMERIC(10,2) NOT NULL,
+    commission_fee NUMERIC(10,2) NOT NULL,
+    net_payout NUMERIC(10,2) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'COMPLETED', -- 'PENDING', 'COMPLETED'
+    bank_reference VARCHAR(100) NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 9. TABEL ORDER ITEMS (RINCIAN MIKRO BARANG)
 CREATE TABLE order_items (
     id BIGSERIAL PRIMARY KEY,
     order_id BIGINT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
@@ -102,10 +142,10 @@ CREATE TABLE order_items (
     price_per_item NUMERIC(10,2) NOT NULL,
     notes TEXT NULL,
     is_custom_item BOOLEAN DEFAULT FALSE,
-    status VARCHAR(20) DEFAULT 'ACTIVE' -- 'ACTIVE', 'CANCELLED'
+    status VARCHAR(20) DEFAULT 'ACTIVE'
 );
 
--- 7. TABEL SYSTEM SETTINGS (PENGATURAN TARIF FLEKSIBEL DYNAMIC)
+-- 10. TABEL SYSTEM SETTINGS (PENGATURAN TARIF FLEKSIBEL DYNAMIC)
 CREATE TABLE system_settings (
     key VARCHAR(50) PRIMARY KEY,
     value VARCHAR(255) NOT NULL,
@@ -117,9 +157,10 @@ CREATE TABLE system_settings (
 INSERT INTO system_settings (key, value, description) VALUES
 ('base_delivery_fee', '10000', 'Tarif dasar pengantaran desa (Rp)'),
 ('per_extra_store_fee', '2000', 'Biaya per toko tambahan (Rp)'),
-('min_order_amount', '0', 'Minimal transaksi pesanan (Rp)');
+('min_order_amount', '0', 'Minimal transaksi pesanan (Rp)')
+ON CONFLICT (key) DO NOTHING;
 
--- 8. TABEL ORDER REVISIONS (AUDIT REVISI ITEM/HARGA DRIVER)
+-- 11. TABEL ORDER REVISIONS (AUDIT REVISI ITEM/HARGA DRIVER)
 CREATE TABLE order_revisions (
     id BIGSERIAL PRIMARY KEY,
     order_id BIGINT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
@@ -133,7 +174,7 @@ CREATE TABLE order_revisions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 9. TABEL ORDER RECEIPTS (FOTO NOTA WARUNG OLEH DRIVER)
+-- 12. TABEL ORDER RECEIPTS (FOTO NOTA WARUNG OLEH DRIVER)
 CREATE TABLE order_receipts (
     id BIGSERIAL PRIMARY KEY,
     order_id BIGINT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
@@ -144,7 +185,7 @@ CREATE TABLE order_receipts (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 10. TABEL COURIER LOANS (PINJAMAN MODAL TALANGAN ADMIN PAGI)
+-- 13. TABEL COURIER LOANS (PINJAMAN MODAL TALANGAN ADMIN PAGI)
 CREATE TABLE courier_loans (
     id BIGSERIAL PRIMARY KEY,
     courier_id BIGINT NOT NULL REFERENCES users(id),
@@ -155,7 +196,7 @@ CREATE TABLE courier_loans (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 11. TABEL CHAT MESSAGES (CHAT DALAM APLIKASI)
+-- 14. TABEL CHAT MESSAGES (CHAT REAL-TIME WEBSOCKETS - PHASE 2)
 CREATE TABLE chat_messages (
     id BIGSERIAL PRIMARY KEY,
     order_id BIGINT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
@@ -167,7 +208,7 @@ CREATE TABLE chat_messages (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 12. TABEL AUDIT LOGS (PERMANENT AUDIT TRAIL)
+-- 15. TABEL AUDIT LOGS (PERMANENT AUDIT TRAIL)
 CREATE TABLE audit_logs (
     id BIGSERIAL PRIMARY KEY,
     entity_type VARCHAR(50) NOT NULL,
@@ -182,10 +223,12 @@ CREATE TABLE audit_logs (
 );
 
 -- INDEXING PERFORMA QUERY
-CREATE INDEX idx_orders_customer ON orders(customer_id);
-CREATE INDEX idx_orders_courier ON orders(courier_id);
-CREATE INDEX idx_orders_status ON orders(status);
-CREATE INDEX idx_products_store ON products(store_id);
-CREATE INDEX idx_chat_order ON chat_messages(order_id, created_at ASC);
-CREATE INDEX idx_audit_entity ON audit_logs(entity_type, entity_id);
-CREATE INDEX idx_audit_created ON audit_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_orders_customer ON orders(customer_id);
+CREATE INDEX IF NOT EXISTS idx_orders_courier ON orders(courier_id);
+CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+CREATE INDEX IF NOT EXISTS idx_products_store ON products(store_id);
+CREATE INDEX IF NOT EXISTS idx_chat_order ON chat_messages(order_id, created_at ASC);
+CREATE INDEX IF NOT EXISTS idx_payments_order ON payments(order_id);
+CREATE INDEX IF NOT EXISTS idx_payouts_store ON store_payouts(store_id);
+CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_logs(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at DESC);

@@ -8,6 +8,7 @@ import { InputTextModule } from 'primeng/inputtext';
 import { TagModule } from 'primeng/tag';
 import { DialogModule } from 'primeng/dialog';
 import { AdminDashboardComponent } from './pages/admin/admin.component';
+import { MerchantDashboardComponent } from './pages/merchant/merchant.component';
 
 interface Store {
   id: number;
@@ -40,12 +41,16 @@ interface Product {
     InputTextModule,
     TagModule,
     DialogModule,
-    AdminDashboardComponent
+    AdminDashboardComponent,
+    MerchantDashboardComponent
   ],
   template: `
     @if (isAdminRoute()) {
       <!-- DEDICATED DESKTOP WEB ADMIN DASHBOARD -->
       <app-admin-dashboard></app-admin-dashboard>
+    } @else if (isMerchantRoute()) {
+      <!-- MERCHANT WARUNG MITRA PORTAL DASHBOARD (PHASE 2) -->
+      <app-merchant-dashboard></app-merchant-dashboard>
     } @else {
       <!-- PURE CUSTOMER PWA WEB APP -->
       <div class="min-h-screen surface-ground text-white">
@@ -53,7 +58,7 @@ interface Product {
         <header class="bg-gradient-to-r from-emerald-800 to-emerald-600 p-4 border-round-bottom-2xl shadow-4 relative">
           <div class="max-w-30rem mx-auto text-center">
             <h1 class="text-2xl font-black m-0">🛵 PESAN ANTAR DESA</h1>
-            <p class="text-xs text-emerald-200 mt-1 m-0">Kuliner & Sembako Desa Siap Antar via WhatsApp</p>
+            <p class="text-xs text-emerald-200 mt-1 m-0">Kuliner & Sembako Desa Siap Antar via WhatsApp / QRIS</p>
           </div>
         </header>
 
@@ -78,7 +83,7 @@ interface Product {
                 <img [src]="store.image_url || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=300'" class="w-full border-round-md h-6rem object-cover mb-2" />
                 <h3 class="text-sm font-bold m-0 text-white">{{ store.store_name }}</h3>
                 <p class="text-xs text-400 m-0 mt-1">{{ store.address_text }}</p>
-                <p-tag value="🟢 Jasa Titip" severity="success" styleClass="mt-2 text-xs"></p-tag>
+                <p-tag [value]="store.is_partner ? '🟢 Toko Mitra' : '🟢 Jasa Titip'" [severity]="store.is_partner ? 'success' : 'info'" styleClass="mt-2 text-xs"></p-tag>
               </div>
             } @empty {
               <div class="col-12 text-center text-gray-400 py-3">Memuat warung desa...</div>
@@ -109,7 +114,7 @@ interface Product {
           <div class="fixed bottom-0 left-50 -translate-x-50 w-11 max-w-30rem bg-gradient-to-r from-emerald-600 to-emerald-800 border-round-top-2xl p-3 shadow-6 flex justify-content-between align-items-center cursor-pointer mb-3" (click)="displayCheckoutModal.set(true)">
             <div>
               <h3 class="text-base font-bold m-0">{{ cartCount() }} Item Belanjaan</h3>
-              <p class="text-xs text-emerald-200 m-0">Klik untuk checkout & share location WA</p>
+              <p class="text-xs text-emerald-200 m-0">Klik untuk checkout & share location WA / QRIS</p>
             </div>
             <div class="text-lg font-black">Rp {{ cartTotal() | number:'1.0-0' }}</div>
           </div>
@@ -131,8 +136,11 @@ interface Product {
               <input type="text" pInputText class="w-full" [(ngModel)]="customerAddress" placeholder="Contoh: RT 03/RW 01 Depan Masjid" />
             </div>
             <div>
-              <label class="block text-xs font-bold text-gray-400 mb-1">Titipan Custom (Opsional)</label>
-              <input type="text" pInputText class="w-full" [(ngModel)]="customNotes" placeholder="Contoh: Pedas sedang, titip beli kerupuk" />
+              <label class="block text-xs font-bold text-gray-400 mb-1">Metode Pembayaran</label>
+              <div class="flex gap-2">
+                <p-button [label]="paymentMethod === 'COD' ? '✅ COD Tunai' : 'COD Tunai'" [styleClass]="paymentMethod === 'COD' ? 'p-button-emerald w-half' : 'p-button-outlined w-half'" (onClick)="paymentMethod = 'COD'"></p-button>
+                <p-button [label]="paymentMethod === 'QRIS' ? '✅ Dynamic QRIS' : 'Dynamic QRIS'" [styleClass]="paymentMethod === 'QRIS' ? 'p-button-emerald w-half' : 'p-button-outlined w-half'" (onClick)="paymentMethod = 'QRIS'"></p-button>
+              </div>
             </div>
 
             <div class="bg-gray-800 p-3 border-round-xl mt-2">
@@ -145,12 +153,20 @@ interface Product {
                 <span>Rp {{ baseDeliveryFee() | number:'1.0-0' }}</span>
               </div>
               <div class="flex justify-content-between text-base font-bold text-emerald-400 mt-2">
-                <span>Total Wajib Bayar COD</span>
+                <span>Total Wajib Bayar</span>
                 <span>Rp {{ cartTotal() | number:'1.0-0' }}</span>
               </div>
             </div>
 
-            <p-button label="📱 Kirim via WhatsApp WAHA" icon="pi pi-whatsapp" styleClass="p-button-success w-full p-button-lg border-round-xl font-bold mt-2" (onClick)="submitCheckout()"></p-button>
+            @if (qrisUrl()) {
+              <div class="text-center p-3 bg-white border-round-xl text-black">
+                <h4 class="font-bold m-0 mb-2">Scan QRIS BCA/Mandiri/GoPay/OVO:</h4>
+                <img [src]="qrisUrl()" class="w-12rem h-12rem mx-auto" />
+                <p class="text-xs text-gray-600 m-0 mt-2">Status bayar akan terverifikasi otomatis!</p>
+              </div>
+            }
+
+            <p-button [label]="paymentMethod === 'QRIS' ? '💳 Bayar dengan Dynamic QRIS' : '📱 Kirim via WhatsApp WAHA'" icon="pi pi-whatsapp" styleClass="p-button-success w-full p-button-lg border-round-xl font-bold mt-2" (onClick)="submitCheckout()"></p-button>
           </div>
         </p-dialog>
       </div>
@@ -161,6 +177,7 @@ export class AppComponent implements OnInit {
   private http = inject(HttpClient);
 
   isAdminRoute = signal<boolean>(false);
+  isMerchantRoute = signal<boolean>(false);
 
   stores = signal<Store[]>([]);
   products = signal<Product[]>([]);
@@ -169,6 +186,7 @@ export class AppComponent implements OnInit {
 
   cart = signal<Product[]>([]);
   baseDeliveryFee = signal<number>(10000);
+  qrisUrl = signal<string>('');
 
   cartSubtotal = computed(() => this.cart().reduce((sum: number, item: Product) => sum + item.price, 0));
   cartTotal = computed(() => this.cartSubtotal() + this.baseDeliveryFee());
@@ -180,10 +198,11 @@ export class AppComponent implements OnInit {
   customerPhone = '';
   customerAddress = '';
   customNotes = '';
+  paymentMethod = 'COD';
 
   ngOnInit() {
     this.checkRoute();
-    if (!this.isAdminRoute()) {
+    if (!this.isAdminRoute() && !this.isMerchantRoute()) {
       this.fetchStores();
       this.fetchTariffs();
     }
@@ -194,6 +213,8 @@ export class AppComponent implements OnInit {
     const hash = window.location.hash;
     if (path.includes('/admin') || hash.includes('admin')) {
       this.isAdminRoute.set(true);
+    } else if (path.includes('/merchant') || hash.includes('merchant')) {
+      this.isMerchantRoute.set(true);
     }
   }
 
@@ -249,8 +270,20 @@ export class AppComponent implements OnInit {
 
     this.http.post<any>('/api/v1/public/checkout', payload).subscribe({
       next: (res: any) => {
-        const waMsg = `Halo, saya ${this.customerName} mau pesan #${res.order_code}.\nAlamat: ${this.customerAddress}\nMohon diproses!`;
-        window.location.href = `https://wa.me/${res.waha_bot_number}?text=${encodeURIComponent(waMsg)}`;
+        if (this.paymentMethod === 'QRIS') {
+          this.http.post<any>('/api/v1/payments/charge', {
+            order_id: res.order_id,
+            gross_amount: this.cartTotal(),
+            payment_type: 'QRIS'
+          }).subscribe({
+            next: (payRes: any) => {
+              this.qrisUrl.set(payRes.qr_code_url);
+            }
+          });
+        } else {
+          const waMsg = `Halo, saya ${this.customerName} mau pesan #${res.order_code}.\nAlamat: ${this.customerAddress}\nMohon diproses!`;
+          window.location.href = `https://wa.me/${res.waha_bot_number}?text=${encodeURIComponent(waMsg)}`;
+        }
       },
       error: () => alert('Gagal membuat pesanan!')
     });

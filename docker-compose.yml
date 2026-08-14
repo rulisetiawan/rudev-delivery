@@ -122,7 +122,7 @@ services:
       - desa_net
 
   # ----------------------------------------------------
-  # 5. GOLANG MICROSERVICES
+  # 5. GOLANG MICROSERVICES (PHASE 1 & PHASE 2)
   # ----------------------------------------------------
   api-gateway:
     build:
@@ -135,12 +135,16 @@ services:
       PORT: "8080"
       AUTH_SERVICE_URL: http://auth-service:8081
       ORDER_SERVICE_URL: http://order-service:8082
+      PAYMENT_SERVICE_URL: http://payment-service:8085
+      CHAT_SERVICE_URL: http://chat-service:8086
       REDIS_HOST: redis:6379
       JWT_SECRET: supersecretkey_desa123
     depends_on:
       - redis
       - auth-service
       - order-service
+      - payment-service
+      - chat-service
     networks:
       - desa_net
 
@@ -211,8 +215,38 @@ services:
     networks:
       - desa_net
 
+  payment-service:
+    build:
+      context: ./services/payment-service
+    container_name: ms_payment_service
+    restart: always
+    environment:
+      PORT: "8085"
+      DB_DSN: postgres://desa_user:desa_password@postgres:5432/order_db?sslmode=disable
+      RABBITMQ_URL: amqp://admin:adminpassword@rabbitmq:5672/
+    depends_on:
+      - postgres
+      - rabbitmq
+    networks:
+      - desa_net
+
+  chat-service:
+    build:
+      context: ./services/chat-service
+    container_name: ms_chat_service
+    restart: always
+    environment:
+      PORT: "8086"
+      DB_DSN: postgres://desa_user:desa_password@postgres:5432/order_db?sslmode=disable
+      REDIS_HOST: redis:6379
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - desa_net
+
   # ----------------------------------------------------
-  # 6. FRONTEND PWA WEB APP (CUSTOMER & ADMIN DASHBOARD)
+  # 6. FRONTEND PWA WEB APP (CUSTOMER, ADMIN & MERCHANT)
   # ----------------------------------------------------
   frontend:
     build:
