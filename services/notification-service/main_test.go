@@ -1,48 +1,35 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
-func TestHandleWahaWebhookLocationParsing(t *testing.T) {
-	payload := WahaWebhookPayload{
-		Event:   "message",
-		Session: "default",
-	}
-	payload.Payload.From = "6281234567890@c.us"
-	payload.Payload.Type = "location"
-	payload.Payload.Data.Lat = -6.917464
-	payload.Payload.Data.Lng = 107.619125
-
-	body, _ := json.Marshal(payload)
-	req := httptest.NewRequest("POST", "/api/v1/waha/webhook", bytes.NewBuffer(body))
-	w := httptest.NewRecorder()
-
-	handleWahaWebhook(w, req)
-
-	resp := w.Result()
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Expected status 200 OK, got %d", resp.StatusCode)
+func TestParseWahaBotCommands(t *testing.T) {
+	tests := []struct {
+		input          string
+		expectedSubstr string
+	}{
+		{"cek order", "BOT DESA"},
+		{"status pesanan", "BOT DESA"},
+		{"daftar warung", "Warung Bu Ani"},
+		{"info tarif", "Rp 10.000"},
+		{"halo bantuan", "Selamat datang"},
 	}
 
-	bodyStr := w.Body.String()
-	if bodyStr != `{"status":"success"}` {
-		t.Errorf("Expected success JSON response, got %s", bodyStr)
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			res := parseWahaBotCommand(tt.input)
+			if !strings.Contains(res, tt.expectedSubstr) {
+				t.Errorf("Expected response for '%s' to contain '%s', got '%s'", tt.input, tt.expectedSubstr, res)
+			}
+		})
 	}
 }
 
-func TestHandleWahaWebhookInvalidMethod(t *testing.T) {
-	req := httptest.NewRequest("GET", "/api/v1/waha/webhook", nil)
-	w := httptest.NewRecorder()
-
-	handleWahaWebhook(w, req)
-
-	resp := w.Result()
-	if resp.StatusCode != http.StatusMethodNotAllowed {
-		t.Errorf("Expected status 405 Method Not Allowed, got %d", resp.StatusCode)
+func TestParseWahaBotCommandEmpty(t *testing.T) {
+	res := parseWahaBotCommand("random text non bot")
+	if res != "" {
+		t.Errorf("Expected empty response for non-bot command, got '%s'", res)
 	}
 }

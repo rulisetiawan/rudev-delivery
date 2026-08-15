@@ -122,12 +122,16 @@ interface Village {
             <h1 class="text-2xl font-black m-0 text-white">SYSTEM CONTROL & MANAGEMENT</h1>
             <p class="text-sm text-slate-400 m-0 mt-1">Kelola data warung, katalog produk, kurir, dan analitis BUMDes</p>
           </div>
-          <div class="flex gap-2 mt-3 md:mt-0">
+          <div class="flex gap-2 mt-3 md:mt-0 flex-wrap">
+            <a href="/api/v1/orders/admin/reports/csv" download class="p-button p-button-success border-round-xl no-underline font-bold">
+              📥 Export Laporan CSV BUMDes
+            </a>
+            <p-button label="⚖️ Daily Settlement Harian" styleClass="p-button-warning border-round-xl" (onClick)="runDailySettlement()"></p-button>
             <a href="http://localhost:3005" target="_blank" class="p-button p-button-outlined p-button-info border-round-xl no-underline">
-              📊 Buka Metabase BI
+              📊 Metabase BI
             </a>
             <a href="http://localhost:9002" target="_blank" class="p-button p-button-outlined p-button-warning border-round-xl no-underline">
-              🛡️ SonarQube SAST Audit
+              🛡️ SonarQube SAST
             </a>
           </div>
         </div>
@@ -411,6 +415,12 @@ export class AdminDashboardComponent implements OnInit {
       per_extra_store_fee: this.perExtraStoreFee
     }).subscribe({
       next: () => alert('Pengaturan tarif berhasil diperbarui!')
+    });
+  }
+
+  runDailySettlement() {
+    this.http.post<any>('/api/v1/orders/admin/settlement/daily', {}).subscribe({
+      next: (res: any) => alert(res.message || 'Settlement harian berhasil diselesaikan!')
     });
   }
 }
